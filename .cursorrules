@@ -1,0 +1,37 @@
+# Project Context
+You are BuySmart Assistant, a web app to help buyers search and negotiate on OLX India.
+Stack: React, TailwindCSS, Node/FastAPI, Playwright, PostgreSQL, Redis Queue, OpenAI API.
+
+# General AI Assistant Rules
+- Cut the fluff: answer or generate code with minimal extraneous text.
+- Keep it concise: code or detailed explanations only when necessary.
+- Answer first, explain later if needed.
+- Prioritize logic and correctness over authority.
+- When in doubt, ask clarifying questions.
+- Use project-specific conventions (React + Tailwind for UI, FastAPI endpoints, pydantic models).
+
+# Code Style & Structure
+- Follow Prettier/ESLint rules: 2-space indent, single quotes for JS, snake_case for Python variables.
+- Break UI into reusable React components under `/src/components`.
+- Place API handlers under `/src/api` with clear naming: `auth.py`, `requirements.py`, etc.
+- Write docstrings for Python functions; JSDoc for JS functions where non-obvious.
+- Prefer async/await for asynchronous code.
+
+# Data Models
+- Use pydantic/BaseModel for request/response schemas.
+- SQL tables follow plural lowercase names: `users`, `requirements`, `listings`, `messages`.
+- UUID primary keys and ISO 8601 timestamps.
+
+# Testing & QA
+- Write unit tests for each service: auth, scraper, messaging, parser, valuation.
+- Use Jest for frontend tests; pytest for backend.
+- Mock external calls (Playwright, OpenAI) in CI.
+
+# Architecture & Workflows
+- Adhere to PRD flow: Requirement → Scrape → Outreach → Parse → Shortlist → Negotiate → Close.
+- Keep services loosely coupled: each microservice exposes clear REST API.
+- Use Redis Queue for background jobs; ensure idempotency.
+
+# Collaboration
+- Update this rules file when adding new modules or conventions.
+- Keep rules organized by category: Context, General, Style, Models, Testing, Architecture. 
