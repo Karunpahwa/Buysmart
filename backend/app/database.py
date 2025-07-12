@@ -30,9 +30,13 @@ def get_db():
     finally:
         db.close()
 
-# Import models here to avoid circular imports
-from .models import User, Requirement, Listing
-
 def create_tables():
     """Create all tables in the database"""
-    Base.metadata.create_all(bind=engine) 
+    # Import models here to avoid circular imports
+    from .models.user import User
+    from .models.requirement import Requirement
+    from .models.listing import Listing
+    
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created successfully") 

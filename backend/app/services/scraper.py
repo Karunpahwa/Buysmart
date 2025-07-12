@@ -314,14 +314,14 @@ async def trigger_scraping_for_requirement(requirement_id: str):
                     ).first()
                     
                     if not existing:
+                        from ..models.listing import ListingStatus
                         db_listing = Listing(
                             requirement_id=requirement_id,
                             olx_id=listing_data.get("olx_id", ""),
                             title=listing_data.get("title", ""),
                             price=listing_data.get("price", 0),
                             location=listing_data.get("location", ""),
-                            posted_date=datetime.utcnow(),  # You could parse the actual date
-                            status="active"
+                            status=ListingStatus.NEW
                         )
                         db.add(db_listing)
                         saved_count += 1
@@ -400,8 +400,9 @@ async def schedule_periodic_scraping():
     try:
         # Get all active requirements that need scraping
         now = datetime.utcnow()
+        from ..models.requirement import RequirementStatus
         requirements = db.query(Requirement).filter(
-            Requirement.status == "active",
+            Requirement.status == RequirementStatus.ACTIVE,
             Requirement.next_scrape_at <= now
         ).all()
         
@@ -411,7 +412,7 @@ async def schedule_periodic_scraping():
     except Exception as e:
         logger.error(f"Error in periodic scraping: {e}")
     finally:
-        db.close() 
+        db.close()
 
 # Standalone functions for API compatibility
 async def search_listings(query: str, location: str = "", max_pages: int = 3) -> List[Dict]:

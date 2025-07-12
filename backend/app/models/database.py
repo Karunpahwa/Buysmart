@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum, JSON
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -92,10 +92,18 @@ class Requirement(Base):
     location_lat = Column(Float, nullable=True)
     location_lng = Column(Float, nullable=True)
     location_radius_km = Column(Float, nullable=True)
-    deal_breakers = Column(Text, nullable=True)  # JSON string
-    condition_preferences = Column(Text, nullable=True)  # JSON string
+    deal_breakers = Column(JSON, nullable=True, default=list)
+    condition_preferences = Column(JSON, nullable=True, default=list)
     timeline = Column(Enum(RequirementTimeline, values_callable=lambda x: [e.value for e in x]), nullable=False)
     status = Column(Enum(RequirementStatus, values_callable=lambda x: [e.value for e in x]), default=RequirementStatus.ACTIVE.value)
+    
+    # Progress tracking fields
+    total_listings_found = Column(Integer, default=0)
+    matching_listings_count = Column(Integer, default=0)
+    last_scraped_at = Column(DateTime, nullable=True)
+    next_scrape_at = Column(DateTime, nullable=True)
+    scraping_status = Column(String, default="pending")  # pending, in_progress, completed, failed
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
