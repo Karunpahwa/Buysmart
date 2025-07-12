@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from ..database import get_db
-from ..models.database import Message as MessageModel, Listing as ListingModel, Requirement as RequirementModel
-from ..models.schemas import Message, MessageCreate, MessagesResponse
+from ..models.database import Message as MessageModel
+from ..models.listing import Listing as ListingModel
+from ..models.requirement import Requirement as RequirementModel
+from ..models.user import User
+from ..models.schemas import MessageOut, MessageCreate, MessagesResponse
 from ..api.auth import get_current_user_dependency
-from ..models.database import User
 
 router = APIRouter(prefix="/message", tags=["messages"])
 
-@router.post("/send", response_model=Message)
+@router.post("/send", response_model=MessageOut)
 def send_message(
     message: MessageCreate,
     current_user: User = Depends(get_current_user_dependency),

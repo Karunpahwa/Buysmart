@@ -3,7 +3,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from ..models.database import User
+from ..models.user import User
 from ..models.schemas import UserCreate, TokenData
 from ..config.settings import settings
 
@@ -60,8 +60,8 @@ def create_user(db: Session, user: UserCreate) -> User:
     db_user = User(
         email=user.email,
         password_hash=hashed_password,
-        oauth_provider=user.oauth_provider,
-        oauth_token=user.oauth_token
+        oauth_provider=None,
+        oauth_token=None
     )
     db.add(db_user)
     db.commit()

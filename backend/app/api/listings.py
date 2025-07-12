@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from ..database import get_db
-from ..models.database import Listing as ListingModel, Requirement as RequirementModel
-from ..models.schemas import Listing, ListingCreate, ListingUpdate, ListingsResponse
+from ..models.listing import Listing as ListingModel
+from ..models.requirement import Requirement as RequirementModel
+from ..models.schemas import ListingOut, ListingCreate, ListingUpdate, ListingsResponse
 from ..api.auth import get_current_user_dependency
-from ..models.database import User
+from ..models.user import User
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -27,7 +28,7 @@ def get_listings_for_requirement(
     total = db.query(ListingModel).filter(ListingModel.requirement_id == requirement_id).count()
     return ListingsResponse(listings=listings, total=total)
 
-@router.get("/item/{listing_id}", response_model=Listing)
+@router.get("/item/{listing_id}", response_model=ListingOut)
 def get_listing(
     listing_id: str,
     current_user: User = Depends(get_current_user_dependency),
@@ -45,7 +46,7 @@ def get_listing(
         raise HTTPException(status_code=403, detail="Not authorized")
     return listing
 
-@router.post("/", response_model=Listing)
+@router.post("/", response_model=ListingOut)
 def create_listing(
     listing: ListingCreate,
     current_user: User = Depends(get_current_user_dependency),
@@ -69,7 +70,7 @@ def create_listing(
     db.refresh(db_listing)
     return db_listing
 
-@router.patch("/item/{listing_id}", response_model=Listing)
+@router.patch("/item/{listing_id}", response_model=ListingOut)
 def update_listing(
     listing_id: str,
     listing_update: ListingUpdate,

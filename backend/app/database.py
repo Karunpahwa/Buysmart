@@ -1,4 +1,8 @@
-from sqlalchemy import create_engine
+"""
+Database configuration and session management
+"""
+
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import os
@@ -23,20 +27,27 @@ else:
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def get_db():
+    """Dependency to get database session"""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
+
 def create_tables():
-    """Create all tables in the database"""
-    # Import models here to avoid circular imports
-    from .models.user import User
-    from .models.requirement import Requirement
-    from .models.listing import Listing
-    
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created successfully") 
+    """Create all database tables"""
+    try:
+        from app.models.user import User
+        from app.models.requirement import Requirement
+        from app.models.listing import Listing
+        Base.metadata.create_all(bind=engine)
+        # Print all table names for debug
+        with engine.connect() as conn:
+            table_names = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table';")).fetchall()
+            print(f"✅ Database tables created: {[name[0] for name in table_names]}")
+    except Exception as e:
+        print(f"❌ Error creating database tables: {e}")
+        raise 

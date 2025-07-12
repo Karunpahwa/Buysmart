@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // Use environment variable for API base URL, fallback to relative path for Vercel
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api'
 
 // Create axios instance
 const api = axios.create({
@@ -56,7 +56,7 @@ export const authApi = {
 // Requirements API
 export const requirementsApi = {
   getRequirements: async (skip = 0, limit = 100) => {
-    const response = await api.get('/requirements/', {
+    const response = await api.get('/requirements', {
       params: { skip, limit },
     })
     return response.data
@@ -68,7 +68,7 @@ export const requirementsApi = {
   },
 
   createRequirement: async (data: any) => {
-    const response = await api.post('/requirements/', data)
+    const response = await api.post('/requirements', data)
     return response.data
   },
 
