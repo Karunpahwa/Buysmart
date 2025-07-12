@@ -56,7 +56,7 @@ export const authApi = {
 // Requirements API
 export const requirementsApi = {
   getRequirements: async (skip = 0, limit = 100) => {
-    const response = await api.get('/requirements', {
+    const response = await api.get('/requirements/', {
       params: { skip, limit },
     })
     return response.data
@@ -68,17 +68,22 @@ export const requirementsApi = {
   },
 
   createRequirement: async (data: any) => {
-    const response = await api.post('/requirements', data)
+    const response = await api.post('/requirements/', data)
     return response.data
   },
 
   updateRequirement: async (id: string, data: any) => {
-    const response = await api.patch(`/requirements/${id}`, data)
+    const response = await api.put(`/requirements/${id}`, data)
     return response.data
   },
 
   deleteRequirement: async (id: string) => {
     const response = await api.delete(`/requirements/${id}`)
+    return response.data
+  },
+
+  triggerScraping: async (id: string) => {
+    const response = await api.post(`/requirements/${id}/trigger-scraping`)
     return response.data
   },
 }
@@ -114,12 +119,12 @@ export const listingsApi = {
 // Messages API
 export const messagesApi = {
   getMessages: async (listingId: string) => {
-    const response = await api.get(`/messages/${listingId}`)
+    const response = await api.get(`/message/history/${listingId}`)
     return response.data
   },
 
   sendMessage: async (listingId: string, data: any) => {
-    const response = await api.post(`/messages/${listingId}`, data)
+    const response = await api.post('/message/send', { ...data, listing_id: listingId })
     return response.data
   },
 }

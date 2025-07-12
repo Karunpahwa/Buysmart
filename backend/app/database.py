@@ -3,6 +3,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import os
 
+Base = declarative_base()
+
 # Database URL configuration for Vercel
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 
@@ -20,7 +22,6 @@ else:
     engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 def get_db():
     db = SessionLocal()
@@ -28,6 +29,9 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Import models here to avoid circular imports
+from .models import User, Requirement, Listing
 
 def create_tables():
     """Create all tables in the database"""

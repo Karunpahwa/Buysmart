@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { requirementsApi, listingsApi, messagesApi } from '../services/api'
-import { ArrowLeft, MessageSquare, ExternalLink, Phone, Mail } from 'lucide-react'
+import { ArrowLeft, MessageSquare, ExternalLink, Phone, Mail, Edit, Trash2, RefreshCw, Clock, CheckCircle, AlertCircle, Play, Pause } from 'lucide-react'
 
 interface Requirement {
   id: string
@@ -12,6 +12,11 @@ interface Requirement {
   budget_max: number
   timeline: string
   status: string
+  total_listings_found: number
+  matching_listings_count: number
+  last_scraped_at: string | null
+  next_scrape_at: string | null
+  scraping_status: string
   created_at: string
   updated_at: string
 }
@@ -37,6 +42,7 @@ interface Message {
 
 const RequirementDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [requirement, setRequirement] = useState<Requirement | null>(null)
   const [listings, setListings] = useState<Listing[]>([])
@@ -45,6 +51,7 @@ const RequirementDetail: React.FC = () => {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [messageLoading, setMessageLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,6 +108,36 @@ const RequirementDetail: React.FC = () => {
     }
   }
 
+  const handleTriggerScraping = async () => {
+    if (!requirement) return
+    
+    setActionLoading(true)
+    try {
+      await requirementsApi.triggerScraping(requirement.id)
+      // Refresh requirement data
+      const updatedRequirement = await requirementsApi.getRequirement(requirement.id)
+      setRequirement(updatedRequirement)
+    } catch (error) {
+      console.error('Failed to trigger scraping:', error)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteRequirement = async () => {
+    if (!requirement || !confirm('Are you sure you want to delete this requirement?')) return
+    
+    setActionLoading(true)
+    try {
+      await requirementsApi.deleteRequirement(requirement.id)
+      navigate('/')
+    } catch (error) {
+      console.error('Failed to delete requirement:', error)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -120,6 +157,41 @@ const RequirementDetail: React.FC = () => {
       default:
         return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  const getScrapingStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="h-4 w-4 text-yellow-500" />
+      case 'in_progress':
+        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-500" />
+      case 'failed':
+        return <AlertCircle className="h-4 w-4 text-red-500" />
+      default:
+        return <Clock className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  const getScrapingStatusText = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'Pending'
+      case 'in_progress':
+        return 'Scraping...'
+      case 'completed':
+        return 'Completed'
+      case 'failed':
+        return 'Failed'
+      default:
+        return 'Unknown'
+    }
+  }
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Never'
+    return new Date(dateString).toLocaleString()
   }
 
   if (loading) {
@@ -154,6 +226,31 @@ const RequirementDetail: React.FC = () => {
               </Link>
               <h1 className="text-2xl font-bold text-gray-900">Requirement Details</h1>
             </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleTriggerScraping}
+                disabled={actionLoading}
+                className="btn-secondary flex items-center"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${actionLoading ? 'animate-spin' : ''}`} />
+                {actionLoading ? 'Triggering...' : 'Trigger Scraping'}
+              </button>
+              <Link
+                to={`/requirement/${requirement.id}/edit`}
+                className="btn-secondary flex items-center"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Link>
+              <button
+                onClick={handleDeleteRequirement}
+                disabled={actionLoading}
+                className="btn-danger flex items-center"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -186,6 +283,28 @@ const RequirementDetail: React.FC = () => {
                   <span className={`mt-1 inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(requirement.status)}`}>
                     {requirement.status}
                   </span>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Scraping Status</label>
+                  <div className="mt-1 flex items-center space-x-2">
+                    {getScrapingStatusIcon(requirement.scraping_status)}
+                    <span className="text-sm text-gray-900">{getScrapingStatusText(requirement.scraping_status)}</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Progress</label>
+                  <div className="mt-1 space-y-1">
+                    <p className="text-sm text-gray-900">Total Found: {requirement.total_listings_found}</p>
+                    <p className="text-sm text-gray-900">Matching: {requirement.matching_listings_count}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Last Scraped</label>
+                  <p className="mt-1 text-sm text-gray-900">{formatDate(requirement.last_scraped_at)}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Next Scrape</label>
+                  <p className="mt-1 text-sm text-gray-900">{formatDate(requirement.next_scrape_at)}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Created</label>
@@ -248,11 +367,9 @@ const RequirementDetail: React.FC = () => {
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Messages</h2>
                 {selectedListing ? (
                   <div className="space-y-4">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <h3 className="font-medium text-sm">{selectedListing.title}</h3>
-                      <p className="text-xs text-gray-600">₹{selectedListing.price} • {selectedListing.location}</p>
+                    <div className="text-sm text-gray-600 mb-2">
+                      Chat with seller for: <span className="font-medium">{selectedListing.title}</span>
                     </div>
-                    
                     <div className="space-y-3 max-h-64 overflow-y-auto">
                       {messages.map((message) => (
                         <div
@@ -271,29 +388,29 @@ const RequirementDetail: React.FC = () => {
                         </div>
                       ))}
                     </div>
-
                     <div className="flex space-x-2">
                       <input
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Type your message..."
-                        className="flex-1 input-field"
                         onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                        placeholder="Type your message..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={messageLoading}
                       />
                       <button
                         onClick={handleSendMessage}
-                        disabled={messageLoading || !newMessage.trim()}
+                        disabled={!newMessage.trim() || messageLoading}
                         className="btn-primary"
                       >
-                        {messageLoading ? 'Sending...' : 'Send'}
+                        <MessageSquare className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">Select a listing to view messages</p>
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p>Select a listing to start messaging</p>
                   </div>
                 )}
               </div>

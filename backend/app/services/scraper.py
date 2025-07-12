@@ -6,10 +6,10 @@ Handles web scraping using Playwright
 import asyncio
 import logging
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from playwright.async_api import async_playwright, Browser, Page
-from ..models.listing import Listing
-from ..database import get_db
+from ..models.database import Listing, Requirement
+from ..database import get_db, SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -260,13 +260,166 @@ class ScraperService:
 scraper_service = ScraperService()
 
 
+async def trigger_scraping_for_requirement(requirement_id: str):
+    """
+    Trigger scraping for a specific requirement
+    
+    Args:
+        requirement_id: ID of the requirement to scrape for
+    """
+    db = SessionLocal()
+    try:
+        # Get requirement
+        requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
+        if not requirement:
+            logger.error(f"Requirement {requirement_id} not found")
+            return
+        
+        # Update scraping status
+        requirement.scraping_status = "in_progress"
+        requirement.last_scraped_at = datetime.utcnow()
+        db.commit()
+        
+        logger.info(f"Starting scraping for requirement {requirement_id}: {requirement.product_query}")
+        
+        # Perform scraping
+        async with scraper_service as scraper:
+            # Determine location for search
+            location = ""
+            if requirement.location_lat and requirement.location_lng:
+                # You could implement reverse geocoding here
+                location = "Mumbai"  # Default for now
+            
+            # Search for listings
+            listings_data = await scraper.search_listings(
+                query=requirement.product_query,
+                location=location,
+                max_pages=3
+            )
+            
+            # Filter listings based on budget and preferences
+            matching_listings = []
+            for listing in listings_data:
+                if _is_listing_matching_requirement(listing, requirement):
+                    matching_listings.append(listing)
+            
+            # Save listings to database
+            saved_count = 0
+            for listing_data in matching_listings:
+                try:
+                    # Check if listing already exists
+                    existing = db.query(Listing).filter(
+                        Listing.olx_id == listing_data.get("olx_id", ""),
+                        Listing.requirement_id == requirement_id
+                    ).first()
+                    
+                    if not existing:
+                        db_listing = Listing(
+                            requirement_id=requirement_id,
+                            olx_id=listing_data.get("olx_id", ""),
+                            title=listing_data.get("title", ""),
+                            price=listing_data.get("price", 0),
+                            location=listing_data.get("location", ""),
+                            posted_date=datetime.utcnow(),  # You could parse the actual date
+                            status="active"
+                        )
+                        db.add(db_listing)
+                        saved_count += 1
+                        
+                except Exception as e:
+                    logger.error(f"Error saving listing: {e}")
+                    continue
+            
+            # Update requirement with results
+            requirement.total_listings_found = len(listings_data)
+            requirement.matching_listings_count = len(matching_listings)
+            requirement.scraping_status = "completed"
+            requirement.last_scraped_at = datetime.utcnow()
+            requirement.next_scrape_at = datetime.utcnow() + timedelta(hours=24)
+            
+            db.commit()
+            
+            logger.info(f"Scraping completed for requirement {requirement_id}: "
+                       f"Found {len(listings_data)} listings, "
+                       f"Saved {saved_count} matching listings")
+            
+    except Exception as e:
+        logger.error(f"Error during scraping for requirement {requirement_id}: {e}")
+        # Update requirement status to failed
+        try:
+            requirement.scraping_status = "failed"
+            db.commit()
+        except:
+            pass
+    finally:
+        db.close()
+
+
+def _is_listing_matching_requirement(listing: Dict, requirement: Requirement) -> bool:
+    """
+    Check if a listing matches the requirement criteria
+    
+    Args:
+        listing: Listing data dictionary
+        requirement: Requirement object
+        
+    Returns:
+        True if listing matches requirement criteria
+    """
+    try:
+        # Check price range
+        price = listing.get("price", 0)
+        if price < requirement.budget_min or price > requirement.budget_max:
+            return False
+        
+        # Check location (if requirement has location constraints)
+        if requirement.location_radius_km and requirement.location_lat and requirement.location_lng:
+            # You could implement distance calculation here
+            pass
+        
+        # Check deal breakers
+        if requirement.deal_breakers:
+            title_lower = listing.get("title", "").lower()
+            for deal_breaker in requirement.deal_breakers:
+                if deal_breaker.lower() in title_lower:
+                    return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error checking listing match: {e}")
+        return False
+
+
+async def schedule_periodic_scraping():
+    """
+    Schedule periodic scraping for all active requirements
+    This should be called by a scheduler (e.g., Celery, APScheduler)
+    """
+    db = SessionLocal()
+    try:
+        # Get all active requirements that need scraping
+        now = datetime.utcnow()
+        requirements = db.query(Requirement).filter(
+            Requirement.status == "active",
+            Requirement.next_scrape_at <= now
+        ).all()
+        
+        for requirement in requirements:
+            await trigger_scraping_for_requirement(requirement.id)
+            
+    except Exception as e:
+        logger.error(f"Error in periodic scraping: {e}")
+    finally:
+        db.close() 
+
+# Standalone functions for API compatibility
 async def search_listings(query: str, location: str = "", max_pages: int = 3) -> List[Dict]:
-    """Search for listings using the scraper service"""
+    """Standalone function to search listings"""
     async with ScraperService() as scraper:
         return await scraper.search_listings(query, location, max_pages)
 
-
 async def get_listing_details(url: str) -> Optional[Dict]:
-    """Get detailed listing information"""
+    """Standalone function to get listing details"""
     async with ScraperService() as scraper:
         return await scraper.get_listing_details(url) 

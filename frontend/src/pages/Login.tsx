@@ -4,13 +4,16 @@ import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
 
 const Login: React.FC = () => {
+  const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   
-  const { login } = useAuth()
+  const { login, register } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,13 +22,34 @@ const Login: React.FC = () => {
     setLoading(true)
 
     try {
-      await login(email, password)
+      if (isLogin) {
+        await login(email, password)
+      } else {
+        if (password !== confirmPassword) {
+          setError('Passwords do not match')
+          setLoading(false)
+          return
+        }
+        await register(email, password)
+      }
       navigate('/')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed')
+      setError(err.response?.data?.detail || (isLogin ? 'Login failed' : 'Registration failed'))
     } finally {
       setLoading(false)
     }
+  }
+
+  const resetForm = () => {
+    setEmail('')
+    setPassword('')
+    setConfirmPassword('')
+    setError('')
+  }
+
+  const toggleMode = () => {
+    setIsLogin(!isLogin)
+    resetForm()
   }
 
   return (
@@ -36,7 +60,7 @@ const Login: React.FC = () => {
             Welcome to BuySmart Assistant
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your account
+            {isLogin ? 'Sign in to your account' : 'Create your account'}
           </p>
         </div>
         
@@ -68,7 +92,7 @@ const Login: React.FC = () => {
                   id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -88,6 +112,38 @@ const Login: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {!isLogin && (
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                  Confirm Password
+                </label>
+                <div className="relative mt-1">
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="input-field pr-10"
+                    placeholder="Confirm your password"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5 text-gray-400" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -102,7 +158,17 @@ const Login: React.FC = () => {
               disabled={loading}
               className="btn-primary w-full flex justify-center py-2 px-4"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? (isLogin ? 'Signing in...' : 'Creating account...') : (isLogin ? 'Sign in' : 'Create account')}
+            </button>
+          </div>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={toggleMode}
+              className="text-sm text-blue-600 hover:text-blue-500"
+            >
+              {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
             </button>
           </div>
         </form>

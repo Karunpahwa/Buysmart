@@ -1,381 +1,153 @@
 """
-Scheduler Service for background tasks
-Handles task scheduling and execution using Redis Queue
+Scheduler Service for periodic tasks
+Handles automatic scraping and other background jobs
 """
 
-import logging
 import asyncio
-from typing import Dict, Any, Optional, List
+import logging
+import uuid
 from datetime import datetime, timedelta
-import json
-from rq import Queue
-from redis import Redis
-from ..config.settings import settings
-from ..services.scraper import search_listings, get_listing_details
-from ..services.parser import analyze_multiple_listings, compare_listings
-from ..services.valuation import batch_valuate_listings, get_market_insights
-from ..database import get_db
-from ..models.requirement import Requirement
-from ..models.listing import Listing
+from typing import Optional, List, Dict, Any
+from ..services.scraper import schedule_periodic_scraping
 
 logger = logging.getLogger(__name__)
 
-# Initialize Redis connection
-redis_conn = Redis.from_url(settings.redis_url)
-task_queue = Queue('buysmart_tasks', connection=redis_conn)
+# In-memory task storage (in production, use Redis or database)
+task_store = {}
 
 
 class SchedulerService:
-    """Service for scheduling and managing background tasks"""
+    """Service for scheduling periodic tasks"""
     
     def __init__(self):
-        self.redis = redis_conn
-        self.queue = task_queue
+        self.running = False
+        self.task: Optional[asyncio.Task] = None
     
-    async def schedule_search_task(self, requirement_id: str, user_id: str) -> str:
-        """
-        Schedule a search task for a requirement
+    async def start(self):
+        """Start the scheduler"""
+        if self.running:
+            logger.warning("Scheduler is already running")
+            return
         
-        Args:
-            requirement_id: ID of the requirement
-            user_id: ID of the user
-            
-        Returns:
-            Task ID
-        """
-        try:
-            # Get requirement details
-            db = get_db()
-            requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
-            
-            if not requirement:
-                raise ValueError("Requirement not found")
-            
-            # Create task data
-            task_data = {
-                "type": "search_listings",
-                "requirement_id": requirement_id,
-                "user_id": user_id,
-                "query": requirement.product_name,
-                "location": requirement.location,
-                "max_price": requirement.max_price,
-                "min_price": requirement.min_price,
-                "created_at": datetime.utcnow().isoformat()
-            }
-            
-            # Schedule task
-            job = self.queue.enqueue(
-                self._execute_search_task,
-                task_data,
-                job_timeout='10m',
-                result_ttl=3600  # Keep results for 1 hour
-            )
-            
-            logger.info(f"Scheduled search task {job.id} for requirement {requirement_id}")
-            return job.id
-            
-        except Exception as e:
-            logger.error(f"Error scheduling search task: {e}")
-            raise
+        self.running = True
+        self.task = asyncio.create_task(self._run_scheduler())
+        logger.info("Scheduler started")
     
-    async def schedule_analysis_task(self, listing_ids: List[str], user_id: str) -> str:
-        """
-        Schedule an analysis task for listings
+    async def stop(self):
+        """Stop the scheduler"""
+        if not self.running:
+            return
         
-        Args:
-            listing_ids: List of listing IDs to analyze
-            user_id: ID of the user
-            
-        Returns:
-            Task ID
-        """
-        try:
-            task_data = {
-                "type": "analyze_listings",
-                "listing_ids": listing_ids,
-                "user_id": user_id,
-                "created_at": datetime.utcnow().isoformat()
-            }
-            
-            job = self.queue.enqueue(
-                self._execute_analysis_task,
-                task_data,
-                job_timeout='15m',
-                result_ttl=3600
-            )
-            
-            logger.info(f"Scheduled analysis task {job.id} for {len(listing_ids)} listings")
-            return job.id
-            
-        except Exception as e:
-            logger.error(f"Error scheduling analysis task: {e}")
-            raise
+        self.running = False
+        if self.task:
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Scheduler stopped")
     
-    async def schedule_valuation_task(self, listing_ids: List[str], user_id: str) -> str:
-        """
-        Schedule a valuation task for listings
-        
-        Args:
-            listing_ids: List of listing IDs to valuate
-            user_id: ID of the user
-            
-        Returns:
-            Task ID
-        """
-        try:
-            task_data = {
-                "type": "valuate_listings",
-                "listing_ids": listing_ids,
-                "user_id": user_id,
-                "created_at": datetime.utcnow().isoformat()
-            }
-            
-            job = self.queue.enqueue(
-                self._execute_valuation_task,
-                task_data,
-                job_timeout='20m',
-                result_ttl=3600
-            )
-            
-            logger.info(f"Scheduled valuation task {job.id} for {len(listing_ids)} listings")
-            return job.id
-            
-        except Exception as e:
-            logger.error(f"Error scheduling valuation task: {e}")
-            raise
-    
-    async def get_task_status(self, task_id: str) -> Dict[str, Any]:
-        """
-        Get status of a scheduled task
-        
-        Args:
-            task_id: Task ID
-            
-        Returns:
-            Task status information
-        """
-        try:
-            job = self.queue.fetch_job(task_id)
-            
-            if not job:
-                return {"status": "not_found"}
-            
-            status = {
-                "task_id": task_id,
-                "status": job.get_status(),
-                "created_at": job.created_at.isoformat() if job.created_at else None,
-                "started_at": job.started_at.isoformat() if job.started_at else None,
-                "ended_at": job.ended_at.isoformat() if job.ended_at else None,
-                "result": job.result if job.is_finished else None,
-                "error": str(job.exc_info) if job.is_failed else None
-            }
-            
-            return status
-            
-        except Exception as e:
-            logger.error(f"Error getting task status: {e}")
-            return {"status": "error", "error": str(e)}
-    
-    async def cancel_task(self, task_id: str) -> bool:
-        """
-        Cancel a scheduled task
-        
-        Args:
-            task_id: Task ID
-            
-        Returns:
-            True if cancelled successfully
-        """
-        try:
-            job = self.queue.fetch_job(task_id)
-            
-            if not job:
-                return False
-            
-            job.cancel()
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error cancelling task: {e}")
-            return False
-    
-    def _execute_search_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute search task (synchronous for RQ)"""
-        try:
-            logger.info(f"Executing search task for requirement {task_data['requirement_id']}")
-            
-            # Search for listings
-            listings = asyncio.run(search_listings(
-                query=task_data["query"],
-                location=task_data.get("location", ""),
-                max_pages=3
-            ))
-            
-            # Filter by price if specified
-            if task_data.get("max_price"):
-                listings = [l for l in listings if l.get("price", 0) <= task_data["max_price"]]
-            
-            if task_data.get("min_price"):
-                listings = [l for l in listings if l.get("price", 0) >= task_data["min_price"]]
-            
-            # Store results in database
-            db = get_db()
-            for listing_data in listings:
-                listing = Listing(
-                    title=listing_data.get("title", ""),
-                    description=listing_data.get("description", ""),
-                    price=listing_data.get("price"),
-                    location=listing_data.get("location", ""),
-                    url=listing_data.get("url", ""),
-                    image_url=listing_data.get("image_url", ""),
-                    source=listing_data.get("source", "olx"),
-                    requirement_id=task_data["requirement_id"],
-                    user_id=task_data["user_id"],
-                    scraped_at=datetime.utcnow()
-                )
-                db.add(listing)
-            
-            db.commit()
-            
-            result = {
-                "status": "completed",
-                "listings_found": len(listings),
-                "requirement_id": task_data["requirement_id"],
-                "completed_at": datetime.utcnow().isoformat()
-            }
-            
-            logger.info(f"Search task completed: {len(listings)} listings found")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error executing search task: {e}")
-            return {
-                "status": "failed",
-                "error": str(e),
-                "requirement_id": task_data.get("requirement_id")
-            }
-    
-    def _execute_analysis_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute analysis task (synchronous for RQ)"""
-        try:
-            logger.info(f"Executing analysis task for {len(task_data['listing_ids'])} listings")
-            
-            # Get listings from database
-            db = get_db()
-            listings = db.query(Listing).filter(
-                Listing.id.in_(task_data["listing_ids"])
-            ).all()
-            
-            # Convert to dict format for analysis
-            listing_data = []
-            for listing in listings:
-                listing_data.append({
-                    "id": str(listing.id),
-                    "title": listing.title,
-                    "description": listing.description,
-                    "price": listing.price,
-                    "location": listing.location,
-                    "url": listing.url,
-                    "image_url": listing.image_url,
-                    "source": listing.source
-                })
-            
-            # Analyze listings
-            analyzed_listings = asyncio.run(analyze_multiple_listings(listing_data))
-            
-            # Compare listings
-            comparison = asyncio.run(compare_listings(analyzed_listings))
-            
-            result = {
-                "status": "completed",
-                "listings_analyzed": len(analyzed_listings),
-                "comparison": comparison,
-                "completed_at": datetime.utcnow().isoformat()
-            }
-            
-            logger.info(f"Analysis task completed: {len(analyzed_listings)} listings analyzed")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error executing analysis task: {e}")
-            return {
-                "status": "failed",
-                "error": str(e)
-            }
-    
-    def _execute_valuation_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute valuation task (synchronous for RQ)"""
-        try:
-            logger.info(f"Executing valuation task for {len(task_data['listing_ids'])} listings")
-            
-            # Get listings from database
-            db = get_db()
-            listings = db.query(Listing).filter(
-                Listing.id.in_(task_data["listing_ids"])
-            ).all()
-            
-            # Convert to dict format for valuation
-            listing_data = []
-            for listing in listings:
-                listing_data.append({
-                    "id": str(listing.id),
-                    "title": listing.title,
-                    "description": listing.description,
-                    "price": listing.price,
-                    "location": listing.location,
-                    "url": listing.url,
-                    "image_url": listing.image_url,
-                    "source": listing.source
-                })
-            
-            # Valuate listings
-            valuated_listings = asyncio.run(batch_valuate_listings(listing_data))
-            
-            # Compare values
-            value_comparison = asyncio.run(compare_values(valuated_listings))
-            
-            result = {
-                "status": "completed",
-                "listings_valuated": len(valuated_listings),
-                "value_comparison": value_comparison,
-                "completed_at": datetime.utcnow().isoformat()
-            }
-            
-            logger.info(f"Valuation task completed: {len(valuated_listings)} listings valuated")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error executing valuation task: {e}")
-            return {
-                "status": "failed",
-                "error": str(e)
-            }
+    async def _run_scheduler(self):
+        """Main scheduler loop"""
+        while self.running:
+            try:
+                # Run periodic scraping every hour
+                await schedule_periodic_scraping()
+                
+                # Wait for 1 hour before next run
+                await asyncio.sleep(3600)  # 1 hour
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in scheduler: {e}")
+                await asyncio.sleep(300)  # Wait 5 minutes on error
 
 
-# Global scheduler service instance
+# Global scheduler instance
 scheduler_service = SchedulerService()
 
 
+async def start_scheduler():
+    """Start the global scheduler"""
+    await scheduler_service.start()
+
+
+async def stop_scheduler():
+    """Stop the global scheduler"""
+    await scheduler_service.stop()
+
+
+# Task scheduling functions for API
 async def schedule_search_task(requirement_id: str, user_id: str) -> str:
-    """Schedule a search task"""
-    return await scheduler_service.schedule_search_task(requirement_id, user_id)
+    """Schedule a search task for a requirement"""
+    task_id = str(uuid.uuid4())
+    task_store[task_id] = {
+        "type": "search",
+        "status": "queued",
+        "requirement_id": requirement_id,
+        "user_id": user_id,
+        "created_at": datetime.utcnow(),
+        "result": None
+    }
+    
+    # In a real implementation, this would queue the task
+    logger.info(f"Scheduled search task {task_id} for requirement {requirement_id}")
+    return task_id
 
 
 async def schedule_analysis_task(listing_ids: List[str], user_id: str) -> str:
-    """Schedule an analysis task"""
-    return await scheduler_service.schedule_analysis_task(listing_ids, user_id)
+    """Schedule an analysis task for listings"""
+    task_id = str(uuid.uuid4())
+    task_store[task_id] = {
+        "type": "analysis",
+        "status": "queued",
+        "listing_ids": listing_ids,
+        "user_id": user_id,
+        "created_at": datetime.utcnow(),
+        "result": None
+    }
+    
+    # In a real implementation, this would queue the task
+    logger.info(f"Scheduled analysis task {task_id} for {len(listing_ids)} listings")
+    return task_id
 
 
 async def schedule_valuation_task(listing_ids: List[str], user_id: str) -> str:
-    """Schedule a valuation task"""
-    return await scheduler_service.schedule_valuation_task(listing_ids, user_id)
+    """Schedule a valuation task for listings"""
+    task_id = str(uuid.uuid4())
+    task_store[task_id] = {
+        "type": "valuation",
+        "status": "queued",
+        "listing_ids": listing_ids,
+        "user_id": user_id,
+        "created_at": datetime.utcnow(),
+        "result": None
+    }
+    
+    # In a real implementation, this would queue the task
+    logger.info(f"Scheduled valuation task {task_id} for {len(listing_ids)} listings")
+    return task_id
 
 
 async def get_task_status(task_id: str) -> Dict[str, Any]:
-    """Get task status"""
-    return await scheduler_service.get_task_status(task_id)
+    """Get status of a task"""
+    if task_id not in task_store:
+        raise ValueError(f"Task {task_id} not found")
+    
+    return task_store[task_id]
 
 
 async def cancel_task(task_id: str) -> bool:
     """Cancel a task"""
-    return await scheduler_service.cancel_task(task_id) 
+    if task_id not in task_store:
+        return False
+    
+    task = task_store[task_id]
+    if task["status"] in ["queued", "running"]:
+        task["status"] = "cancelled"
+        task["cancelled_at"] = datetime.utcnow()
+        logger.info(f"Cancelled task {task_id}")
+        return True
+    
+    return False 

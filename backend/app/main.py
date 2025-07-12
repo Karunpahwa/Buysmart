@@ -3,14 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .api import auth, requirements, listings, messages, scraper, parser, valuation, scheduler
 from .database import create_tables
+from .services.scheduler import start_scheduler, stop_scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     create_tables()
+    await start_scheduler()
     yield
     # Shutdown
-    pass
+    await stop_scheduler()
 
 # Create FastAPI app
 app = FastAPI(
@@ -23,7 +25,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend URLs
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -68,7 +68,7 @@ class MessageRole(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
     
-    id = Column(UUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=True)  # Null for OAuth users
     oauth_provider = Column(String, nullable=True)
@@ -83,8 +83,8 @@ class User(Base):
 class Requirement(Base):
     __tablename__ = "requirements"
     
-    id = Column(UUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(UUID(), ForeignKey("users.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     product_query = Column(String, nullable=False)
     category = Column(Enum(Category, values_callable=lambda x: [e.value for e in x]), nullable=False)
     budget_min = Column(Float, nullable=False)
@@ -107,8 +107,8 @@ class Requirement(Base):
 class Listing(Base):
     __tablename__ = "listings"
     
-    id = Column(UUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    requirement_id = Column(UUID(), ForeignKey("requirements.id"), nullable=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    requirement_id = Column(String(36), ForeignKey("requirements.id"), nullable=True)
     olx_id = Column(String, unique=True, nullable=True)
     title = Column(String, nullable=False)
     price = Column(Float, nullable=True)
@@ -127,8 +127,8 @@ class Listing(Base):
 class Message(Base):
     __tablename__ = "messages"
     
-    id = Column(UUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    listing_id = Column(UUID(), ForeignKey("listings.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    listing_id = Column(String(36), ForeignKey("listings.id"), nullable=False)
     role = Column(Enum(MessageRole, values_callable=lambda x: [e.value for e in x]), nullable=False)
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -140,8 +140,8 @@ class Message(Base):
 class ParsedResponse(Base):
     __tablename__ = "parsed_responses"
     
-    id = Column(UUID(), primary_key=True, default=lambda: str(uuid.uuid4()))
-    listing_id = Column(UUID(), ForeignKey("listings.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    listing_id = Column(String(36), ForeignKey("listings.id"), nullable=False)
     condition = Column(String, nullable=True)
     negotiable = Column(Boolean, nullable=True)
     bill_available = Column(Boolean, nullable=True)

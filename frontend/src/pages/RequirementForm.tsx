@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { requirementsApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import { ArrowLeft } from 'lucide-react'
 
 interface FormData {
@@ -18,51 +19,92 @@ interface FormData {
 
 const RequirementForm: React.FC = () => {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
+  const { token, user, loading } = useAuth()
+  const [formLoading, setFormLoading] = useState(false)
   const [error, setError] = useState('')
   
   const [formData, setFormData] = useState<FormData>({
     product_query: '',
     category: 'electronics',
     budget_min: 0,
-    budget_max: 10000,
+    budget_max: 0,
+    location_lat: undefined,
+    location_lng: undefined,
+    location_radius_km: undefined,
     deal_breakers: [],
     condition_preferences: [],
     timeline: 'flexible'
   })
 
-  const categories = [
-    { value: 'electronics', label: 'Electronics' },
-    { value: 'home_decor', label: 'Home Decor' },
-    { value: 'furniture', label: 'Furniture' },
-    { value: 'apparel', label: 'Apparel' }
-  ]
+  // Debug authentication state
+  useEffect(() => {
+    console.log('Auth Debug:', { token, user, loading })
+    console.log('LocalStorage token:', localStorage.getItem('token'))
+  }, [token, user, loading])
 
-  const timelines = [
-    { value: 'urgent', label: 'Urgent' },
-    { value: 'flexible', label: 'Flexible' }
-  ]
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!loading && !token) {
+      console.log('No token found, redirecting to login')
+      navigate('/login')
+    }
+  }, [token, loading, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
+    setFormLoading(true)
 
     try {
-      await requirementsApi.createRequirement(formData)
+      console.log('Submitting requirement with token:', token)
+      console.log('Form data:', formData)
+      
+      const result = await requirementsApi.createRequirement(formData)
+      console.log('Requirement created successfully:', result)
       navigate('/')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create requirement')
+    } catch (error: any) {
+      console.error('Error creating requirement:', error)
+      setError(error.response?.data?.detail || 'Failed to create requirement')
     } finally {
-      setLoading(false)
+      setFormLoading(false)
     }
   }
 
-  const handleInputChange = (field: keyof FormData, value: any) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [name]: value
     }))
+  }
+
+  const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value ? parseFloat(value) : 0
+    }))
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Please log in to create a requirement</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -87,43 +129,46 @@ const RequirementForm: React.FC = () => {
       <main className="max-w-2xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="card">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Product Query */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {error}
+              </div>
+            )}
+
             <div>
               <label htmlFor="product_query" className="block text-sm font-medium text-gray-700">
                 What are you looking for?
               </label>
-              <textarea
+              <input
+                type="text"
                 id="product_query"
+                name="product_query"
                 value={formData.product_query}
-                onChange={(e) => handleInputChange('product_query', e.target.value)}
-                className="input-field mt-1"
-                rows={3}
-                placeholder="Describe the product you want to buy..."
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g., iPhone 13, MacBook Pro, etc."
                 required
               />
             </div>
 
-            {/* Category */}
             <div>
               <label htmlFor="category" className="block text-sm font-medium text-gray-700">
                 Category
               </label>
               <select
                 id="category"
+                name="category"
                 value={formData.category}
-                onChange={(e) => handleInputChange('category', e.target.value)}
-                className="input-field mt-1"
-                required
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                {categories.map(category => (
-                  <option key={category.value} value={category.value}>
-                    {category.label}
-                  </option>
-                ))}
+                <option value="electronics">Electronics</option>
+                <option value="home_decor">Home & Decor</option>
+                <option value="furniture">Furniture</option>
+                <option value="apparel">Apparel</option>
               </select>
             </div>
 
-            {/* Budget Range */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="budget_min" className="block text-sm font-medium text-gray-700">
@@ -132,10 +177,11 @@ const RequirementForm: React.FC = () => {
                 <input
                   type="number"
                   id="budget_min"
+                  name="budget_min"
                   value={formData.budget_min}
-                  onChange={(e) => handleInputChange('budget_min', Number(e.target.value))}
-                  className="input-field mt-1"
-                  min="0"
+                  onChange={handleNumberChange}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="0"
                   required
                 />
               </div>
@@ -146,40 +192,31 @@ const RequirementForm: React.FC = () => {
                 <input
                   type="number"
                   id="budget_max"
+                  name="budget_max"
                   value={formData.budget_max}
-                  onChange={(e) => handleInputChange('budget_max', Number(e.target.value))}
-                  className="input-field mt-1"
-                  min="0"
+                  onChange={handleNumberChange}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="10000"
                   required
                 />
               </div>
             </div>
 
-            {/* Timeline */}
             <div>
               <label htmlFor="timeline" className="block text-sm font-medium text-gray-700">
                 Timeline
               </label>
               <select
                 id="timeline"
+                name="timeline"
                 value={formData.timeline}
-                onChange={(e) => handleInputChange('timeline', e.target.value)}
-                className="input-field mt-1"
-                required
+                onChange={handleInputChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                {timelines.map(timeline => (
-                  <option key={timeline.value} value={timeline.value}>
-                    {timeline.label}
-                  </option>
-                ))}
+                <option value="flexible">Flexible</option>
+                <option value="urgent">Urgent</option>
               </select>
             </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                {error}
-              </div>
-            )}
 
             <div className="flex justify-end space-x-4">
               <button
@@ -191,10 +228,10 @@ const RequirementForm: React.FC = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={formLoading}
                 className="btn-primary"
               >
-                {loading ? 'Creating...' : 'Create Requirement'}
+                {formLoading ? 'Creating...' : 'Create Requirement'}
               </button>
             </div>
           </form>
@@ -204,4 +241,4 @@ const RequirementForm: React.FC = () => {
   )
 }
 
-export default RequirementForm 
+export default RequirementForm; 

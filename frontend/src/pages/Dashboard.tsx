@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { requirementsApi } from '../services/api'
-import { Plus, LogOut, Search, MessageSquare, TrendingUp, Eye } from 'lucide-react'
+import { Plus, LogOut, Search, MessageSquare, TrendingUp, Eye, RefreshCw, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 
 interface Requirement {
   id: string
@@ -11,6 +11,11 @@ interface Requirement {
   budget_min: number
   budget_max: number
   status: string
+  total_listings_found: number
+  matching_listings_count: number
+  last_scraped_at: string | null
+  next_scrape_at: string | null
+  scraping_status: string
   created_at: string
 }
 
@@ -51,6 +56,41 @@ const Dashboard: React.FC = () => {
     }
   }
 
+  const getScrapingStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="h-4 w-4 text-yellow-500" />
+      case 'in_progress':
+        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-500" />
+      case 'failed':
+        return <AlertCircle className="h-4 w-4 text-red-500" />
+      default:
+        return <Clock className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  const getScrapingStatusText = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'Pending'
+      case 'in_progress':
+        return 'Scraping...'
+      case 'completed':
+        return 'Completed'
+      case 'failed':
+        return 'Failed'
+      default:
+        return 'Unknown'
+    }
+  }
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Never'
+    return new Date(dateString).toLocaleString()
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -77,7 +117,7 @@ const Dashboard: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="card">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -99,14 +139,16 @@ const Dashboard: React.FC = () => {
           <div className="card">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <MessageSquare className="h-8 w-8 text-green-600" />
+                <RefreshCw className="h-8 w-8 text-blue-600" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">
-                    In Negotiation
+                    Total Listings Found
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">0</dd>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {requirements.reduce((sum, r) => sum + r.total_listings_found, 0)}
+                  </dd>
                 </dl>
               </div>
             </div>
@@ -115,7 +157,25 @@ const Dashboard: React.FC = () => {
           <div className="card">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <TrendingUp className="h-8 w-8 text-blue-600" />
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    Matching Listings
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {requirements.reduce((sum, r) => sum + r.matching_listings_count, 0)}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <TrendingUp className="h-8 w-8 text-purple-600" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
@@ -165,6 +225,20 @@ const Dashboard: React.FC = () => {
                         <p className="text-sm text-gray-500 mt-1">
                           {requirement.category} • ₹{requirement.budget_min} - ₹{requirement.budget_max}
                         </p>
+                        <div className="flex items-center space-x-4 mt-2">
+                          <div className="flex items-center space-x-1">
+                            {getScrapingStatusIcon(requirement.scraping_status)}
+                            <span className="text-xs text-gray-500">
+                              {getScrapingStatusText(requirement.scraping_status)}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            Found: {requirement.total_listings_found} • Matching: {requirement.matching_listings_count}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            Last scraped: {formatDate(requirement.last_scraped_at)}
+                          </span>
+                        </div>
                         <p className="text-xs text-gray-400 mt-1">
                           Created {new Date(requirement.created_at).toLocaleDateString()}
                         </p>

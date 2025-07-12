@@ -68,6 +68,22 @@ class Requirement(RequirementBase):
         from_attributes = True
 
 
+class RequirementOut(RequirementBase):
+    id: UUID
+    user_id: UUID
+    status: RequirementStatus
+    total_listings_found: int
+    matching_listings_count: int
+    last_scraped_at: Optional[datetime]
+    next_scrape_at: Optional[datetime]
+    scraping_status: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
 # Listing schemas
 class ListingBase(BaseModel):
     olx_id: str
@@ -157,7 +173,7 @@ class TokenData(BaseModel):
 
 # API Response schemas
 class RequirementsResponse(BaseModel):
-    requirements: List[Requirement]
+    requirements: List[RequirementOut]
     total: int
 
 

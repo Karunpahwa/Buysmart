@@ -12,6 +12,7 @@ interface AuthContextType {
   user: User | null
   token: string | null
   login: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string) => Promise<void>
   logout: () => void
   loading: boolean
 }
@@ -69,6 +70,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
+  const register = async (email: string, password: string) => {
+    try {
+      const userData = await authApi.register(email, password)
+      // After registration, automatically log in the user
+      await login(email, password)
+    } catch (error) {
+      console.error('Registration failed:', error)
+      throw error
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setToken(null)
@@ -79,6 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     token,
     login,
+    register,
     logout,
     loading
   }
