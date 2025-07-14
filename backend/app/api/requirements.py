@@ -12,22 +12,24 @@ import logging
 from ..database import get_db
 from ..models.requirement import Requirement
 from ..models.schemas import RequirementCreate, RequirementOut, RequirementUpdate
-from .auth import get_current_user_dependency
 from ..enums import ScrapingStatus
+from ..models.user import User
 
 router = APIRouter()
+
+# Mock user for development
+mock_user = User(id=str(uuid.uuid4()), email="test@example.com", password_hash="test")
 
 
 @router.post("/", response_model=RequirementOut)
 def create_requirement(
     requirement: RequirementCreate,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_dependency)
+    db: Session = Depends(get_db)
 ):
     """Create a new requirement"""
     try:
         db_requirement = Requirement(
-            user_id=current_user.id,
+            user_id=mock_user.id,
             **requirement.dict()
         )
         db.add(db_requirement)
@@ -47,12 +49,11 @@ def create_requirement(
 def get_requirements(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_dependency)
+    db: Session = Depends(get_db)
 ):
     """Get all requirements for the current user"""
     requirements = db.query(Requirement).filter(
-        Requirement.user_id == current_user.id
+        Requirement.user_id == mock_user.id
     ).offset(skip).limit(limit).all()
     return requirements
 
@@ -60,13 +61,12 @@ def get_requirements(
 @router.get("/{requirement_id}", response_model=RequirementOut)
 def get_requirement(
     requirement_id: str,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_dependency)
+    db: Session = Depends(get_db)
 ):
     """Get a specific requirement by ID"""
     requirement = db.query(Requirement).filter(
         Requirement.id == requirement_id,
-        Requirement.user_id == current_user.id
+        Requirement.user_id == mock_user.id
     ).first()
     
     if not requirement:
@@ -82,13 +82,12 @@ def get_requirement(
 def update_requirement(
     requirement_id: str,
     requirement_update: RequirementUpdate,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_dependency)
+    db: Session = Depends(get_db)
 ):
     """Update a requirement"""
     db_requirement = db.query(Requirement).filter(
         Requirement.id == requirement_id,
-        Requirement.user_id == current_user.id
+        Requirement.user_id == mock_user.id
     ).first()
     
     if not db_requirement:
@@ -109,13 +108,12 @@ def update_requirement(
 @router.delete("/{requirement_id}")
 def delete_requirement(
     requirement_id: str,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_dependency)
+    db: Session = Depends(get_db)
 ):
     """Delete a requirement"""
     db_requirement = db.query(Requirement).filter(
         Requirement.id == requirement_id,
-        Requirement.user_id == current_user.id
+        Requirement.user_id == mock_user.id
     ).first()
     
     if not db_requirement:
@@ -132,14 +130,13 @@ def delete_requirement(
 @router.get("/{requirement_id}/listings")
 def get_requirement_listings(
     requirement_id: str,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_dependency)
+    db: Session = Depends(get_db)
 ):
     """Get all listings for a specific requirement"""
     # First verify the requirement belongs to the user
     requirement = db.query(Requirement).filter(
         Requirement.id == requirement_id,
-        Requirement.user_id == current_user.id
+        Requirement.user_id == mock_user.id
     ).first()
     
     if not requirement:

@@ -1,15 +1,9 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { LogOut, Home, Plus, Search } from 'lucide-react'
+import { Home, Plus } from 'lucide-react'
 
 const Navigation: React.FC = () => {
-  const { user, logout } = useAuth()
   const location = useLocation()
-
-  const handleLogout = () => {
-    logout()
-  }
 
   const isActive = (path: string) => {
     return location.pathname === path
@@ -49,19 +43,6 @@ const Navigation: React.FC = () => {
                 New Requirement
               </Link>
             </nav>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-2">
-              <span className="text-sm text-gray-700">Welcome, {user?.email}</span>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <LogOut className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
           </div>
         </div>
       </div>

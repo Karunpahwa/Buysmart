@@ -5,22 +5,24 @@ from ..database import get_db
 from ..models.listing import Listing as ListingModel
 from ..models.requirement import Requirement as RequirementModel
 from ..models.schemas import ListingOut, ListingCreate, ListingUpdate, ListingsResponse
-from ..api.auth import get_current_user_dependency
 from ..models.user import User
+import uuid
 
 router = APIRouter(prefix="/listings", tags=["listings"])
+
+# Mock user for development
+mock_user = User(id=str(uuid.uuid4()), email="test@example.com", password_hash="test")
 
 @router.get("/{requirement_id}", response_model=ListingsResponse)
 def get_listings_for_requirement(
     requirement_id: str,
-    current_user: User = Depends(get_current_user_dependency),
     db: Session = Depends(get_db)
 ):
     """Fetch all listings for a given requirement"""
     # Ensure requirement belongs to user
     requirement = db.query(RequirementModel).filter(
         RequirementModel.id == requirement_id,
-        RequirementModel.user_id == current_user.id
+        RequirementModel.user_id == mock_user.id
     ).first()
     if not requirement:
         raise HTTPException(status_code=404, detail="Requirement not found")
@@ -31,7 +33,6 @@ def get_listings_for_requirement(
 @router.get("/item/{listing_id}", response_model=ListingOut)
 def get_listing(
     listing_id: str,
-    current_user: User = Depends(get_current_user_dependency),
     db: Session = Depends(get_db)
 ):
     listing = db.query(ListingModel).filter(ListingModel.id == listing_id).first()
@@ -40,7 +41,7 @@ def get_listing(
     # Check user owns the requirement
     requirement = db.query(RequirementModel).filter(
         RequirementModel.id == listing.requirement_id,
-        RequirementModel.user_id == current_user.id
+        RequirementModel.user_id == mock_user.id
     ).first()
     if not requirement:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -49,7 +50,6 @@ def get_listing(
 @router.post("/", response_model=ListingOut)
 def create_listing(
     listing: ListingCreate,
-    current_user: User = Depends(get_current_user_dependency),
     db: Session = Depends(get_db)
 ):
     # Convert UUID to string for SQLite compatibility
@@ -57,7 +57,7 @@ def create_listing(
     # Check user owns the requirement
     requirement = db.query(RequirementModel).filter(
         RequirementModel.id == requirement_id_str,
-        RequirementModel.user_id == current_user.id
+        RequirementModel.user_id == mock_user.id
     ).first()
     if not requirement:
         raise HTTPException(status_code=403, detail="Not authorized to add listing to this requirement")
@@ -74,7 +74,6 @@ def create_listing(
 def update_listing(
     listing_id: str,
     listing_update: ListingUpdate,
-    current_user: User = Depends(get_current_user_dependency),
     db: Session = Depends(get_db)
 ):
     db_listing = db.query(ListingModel).filter(ListingModel.id == listing_id).first()
@@ -83,7 +82,7 @@ def update_listing(
     # Check user owns the requirement
     requirement = db.query(RequirementModel).filter(
         RequirementModel.id == db_listing.requirement_id,
-        RequirementModel.user_id == current_user.id
+        RequirementModel.user_id == mock_user.id
     ).first()
     if not requirement:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -97,7 +96,6 @@ def update_listing(
 @router.delete("/item/{listing_id}")
 def delete_listing(
     listing_id: str,
-    current_user: User = Depends(get_current_user_dependency),
     db: Session = Depends(get_db)
 ):
     db_listing = db.query(ListingModel).filter(ListingModel.id == listing_id).first()
@@ -106,7 +104,7 @@ def delete_listing(
     # Check user owns the requirement
     requirement = db.query(RequirementModel).filter(
         RequirementModel.id == db_listing.requirement_id,
-        RequirementModel.user_id == current_user.id
+        RequirementModel.user_id == mock_user.id
     ).first()
     if not requirement:
         raise HTTPException(status_code=403, detail="Not authorized")
